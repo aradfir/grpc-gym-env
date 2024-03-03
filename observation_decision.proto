@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package observation_decision;
+
+message Observation {
+  int32 x = 1;
+  int32 y = 2;
+  int32 state = 3;
+}
+
+message Action {
+  int32 action = 1;
+}
+
+service Decision {
+  rpc GetAction(Observation) returns (Action);
+}
