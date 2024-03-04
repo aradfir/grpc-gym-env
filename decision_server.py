@@ -17,6 +17,7 @@ class CustomGymEnv(gym.Env):
         self.action_queue = queue.Queue(1)
         self.observation_queue = queue.Queue(1)
         self.wants_reset = False
+        self.has_sent_reset = False
         self.episode_reward = 0
         self.action_space = gym.spaces.Discrete(5)
     
@@ -29,7 +30,12 @@ class CustomGymEnv(gym.Env):
         self.episode_reward = 0
         self.wants_reset = True
         
+        
     def get_best_action(self, observation):
+        if self.wants_reset:
+            self.wants_reset = False
+            self.has_sent_reset = True
+            return -1
         if observation.x < 2:
             return 0
         elif observation.x > 2:
@@ -54,27 +60,21 @@ class CustomGymEnv(gym.Env):
         
         manhattan_dist_to_goal = abs(observation.x - 2) + abs(observation.y - 2)
         reward = -0.5 * manhattan_dist_to_goal
+        if self.has_sent_reset: 
+            reward = 0
+            self.has_sent_reset = False
         return observation, reward, False, {}
     
 class DecisionServicer(observation_decision_pb2_grpc.DecisionServicer):
     def __init__(self,env):
         super(DecisionServicer, self).__init__()
         self.gym_env: CustomGymEnv = env
-    # def GetAction(self, request, context):
-    #     # return random response
-    #     action = observation_decision_pb2.Action(action = random.choice([0,1,2,3,4]))
-    #     return action
     def GetAction(self, request, context):
         print(f"Received Observation: {request}")
         with self.gym_env.action_queue.mutex:
             self.gym_env.action_queue.queue.clear()
-        if self.gym_env.wants_reset:
-            print("Wants to reset! sending reset action!")
-            action = observation_decision_pb2.Action(action=-1)
-            self.gym_env.wants_reset = False
-            return action
         self.gym_env.observation_queue.put(request, block=False)
-        selected_action = self.gym_env.action_queue.get(block = True)
+        selected_action = self.gym_env.action_queue.get(block = True)           
         action = observation_decision_pb2.Action(action= selected_action)
         print(f"Sending Action: {action}")
         return action
