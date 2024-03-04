@@ -17,17 +17,28 @@ class CustomGymEnv(gym.Env):
         self.action_queue = queue.Queue(1)
         self.observation_queue = queue.Queue(1)
         self.wants_reset = False
-        self.action_space = gym.spaces.Discrete(6)
+        self.episode_reward = 0
+        self.action_space = gym.spaces.Discrete(5)
     
     def wait_for_observation_and_return(self):
-        while self.observation_queue is None:
-            pass
-        return self.observation_queue
+        observation = self.observation_queue.get(block=True)
+        return observation
     def reset(self):
         # set selected action as -1, the special reset action
+        print(f"Reseting! Episode Reward:{self.episode_reward}")
+        self.episode_reward = 0
         self.wants_reset = True
         
-
+    def get_best_action(self, observation):
+        if observation.x < 2:
+            return 0
+        elif observation.x > 2:
+            return 2
+        if observation.y < 2:
+            return 1
+        elif observation.y > 2:
+            return 3
+        return 4
     def step(self, action):
         # set selected action as the action chosen by the decision server
         with self.observation_queue.mutex:
@@ -40,7 +51,10 @@ class CustomGymEnv(gym.Env):
             return observation, 1000, True, {}
         if abs(observation.x) > 10 or abs(observation.x) > 10:
             return observation, -1000, True, {}
-        return observation, 0, False, {}
+        
+        manhattan_dist_to_goal = abs(observation.x - 2) + abs(observation.y - 2)
+        reward = -0.5 * manhattan_dist_to_goal
+        return observation, reward, False, {}
     
 class DecisionServicer(observation_decision_pb2_grpc.DecisionServicer):
     def __init__(self,env):
@@ -89,10 +103,11 @@ if __name__ == '__main__':
     observation = env.wait_for_observation_and_return()
     while server_thread.is_alive():
         # sample action from the environment
-        action = env.action_space.sample()
+        action = env.get_best_action(observation)
         print(f"Action: {action}")
         # get observation from the environment
         observation, reward, done, info = env.step(action)
+        env.episode_reward += reward
         print(f"Observation: {observation}, Reward: {reward}, Done: {done}, Info: {info}")
         if done:
             env.reset()
