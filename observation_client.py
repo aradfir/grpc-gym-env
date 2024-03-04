@@ -39,7 +39,8 @@ def observation_client():
         elif action.action == -1: 
             # special reset action
             x=y=0
-        sleep(1)
+        print(f"New State: x={x},y={y}")
+        input()
 
 if __name__ == '__main__':
     observation_client()
