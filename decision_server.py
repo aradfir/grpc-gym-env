@@ -1,4 +1,4 @@
-import random
+
 import time
 import grpc
 from concurrent import futures
@@ -7,6 +7,8 @@ import observation_decision_pb2_grpc
 import gymnasium as gym
 import threading
 import queue
+from stable_baselines3 import A2C
+from stable_baselines3.common.env_checker import check_env
 
 class CustomGymEnv(gym.Env):
     
@@ -16,26 +18,34 @@ class CustomGymEnv(gym.Env):
         
         self.action_queue = queue.Queue(1)
         self.observation_queue = queue.Queue(1)
-        self.wants_reset = False
-        self.has_sent_reset = False
         self.episode_reward = 0
         self.action_space = gym.spaces.Discrete(5)
     
     def wait_for_observation_and_return(self):
         observation = self.observation_queue.get(block=True)
-        return observation
-    def reset(self):
+        return observation, {}
+    
+    def reset(self, seed = -1):
         # set selected action as -1, the special reset action
         print(f"Reseting! Episode Reward:{self.episode_reward}")
         self.episode_reward = 0
-        self.wants_reset = True
-        
+        self.do_action(-1, True)
+        return self.wait_for_observation_and_return()
+    
+    def clear_actions_queue(self):
+        with self.action_queue.mutex:
+            self.action_queue.queue.clear()
+
+    def clear_observation_queue(self):
+        with self.observation_queue.mutex:
+            self.observation_queue.queue.clear()
+
+    def do_action(self, action, clear_actions: bool = False):
+        if clear_actions:
+            self.clear_actions_queue()
+        self.action_queue.put(action,block=False)
         
     def get_best_action(self, observation):
-        if self.wants_reset:
-            self.wants_reset = False
-            self.has_sent_reset = True
-            return -1
         if observation.x < 2:
             return 0
         elif observation.x > 2:
@@ -45,11 +55,11 @@ class CustomGymEnv(gym.Env):
         elif observation.y > 2:
             return 3
         return 4
+    
     def step(self, action):
         # set selected action as the action chosen by the decision server
-        with self.observation_queue.mutex:
-            self.observation_queue.queue.clear()
-        self.action_queue.put(action,block=False)
+        self.clear_observation_queue()
+        self.do_action(action)
         observation = self.observation_queue.get(block = True)
         
         # now latest observation is loaded from DecisionServicer
@@ -60,9 +70,6 @@ class CustomGymEnv(gym.Env):
         
         manhattan_dist_to_goal = abs(observation.x - 2) + abs(observation.y - 2)
         reward = -0.5 * manhattan_dist_to_goal
-        if self.has_sent_reset: 
-            reward = 0
-            self.has_sent_reset = False
         return observation, reward, False, {}
     
 class DecisionServicer(observation_decision_pb2_grpc.DecisionServicer):
@@ -71,8 +78,7 @@ class DecisionServicer(observation_decision_pb2_grpc.DecisionServicer):
         self.gym_env: CustomGymEnv = env
     def GetAction(self, request, context):
         print(f"Received Observation: {request}")
-        with self.gym_env.action_queue.mutex:
-            self.gym_env.action_queue.queue.clear()
+        self.gym_env.clear_actions_queue()
         self.gym_env.observation_queue.put(request, block=False)
         selected_action = self.gym_env.action_queue.get(block = True)           
         action = observation_decision_pb2.Action(action= selected_action)
@@ -100,7 +106,9 @@ if __name__ == '__main__':
     # Create a new thread for running the server
     server_thread = threading.Thread(target=serve, args=(env,))
     server_thread.start()
-    observation = env.wait_for_observation_and_return()
+    # check_env(env)
+    # model = A2C("CnnPolicy", env).learn(total_timesteps=1000)
+    observation, info = env.wait_for_observation_and_return()
     while server_thread.is_alive():
         # sample action from the environment
         action = env.get_best_action(observation)
@@ -110,7 +118,7 @@ if __name__ == '__main__':
         env.episode_reward += reward
         print(f"Observation: {observation}, Reward: {reward}, Done: {done}, Info: {info}")
         if done:
-            env.reset()
+            observation, info = env.reset()
             print("Environment reset")
         else:
             print("Environment not reset")
