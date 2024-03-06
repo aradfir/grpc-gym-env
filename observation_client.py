@@ -40,7 +40,12 @@ def observation_client():
             # special reset action
             x=y=0
         print(f"New State: x={x},y={y}")
-        input()
+        sleep(0.01)
+        # reset if out of bounds (x or y greater than 10)
+        if abs(x) > 10 or abs(y) > 10:
+            x=y=0
+            print("Out of bounds, resetting to (0,0)")
+        # input()
 
 if __name__ == '__main__':
     observation_client()
