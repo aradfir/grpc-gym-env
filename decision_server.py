@@ -121,16 +121,16 @@ if __name__ == '__main__':
     # check_env(env)
     
     model = A2C("MlpPolicy", env)
-    # model.learn(total_timesteps=7_000, progress_bar=True)
-    model.load("a2c_custom_gym")
+    model.learn(total_timesteps=5_000, progress_bar=True)
+    # model.load("a2c_custom_gym")
     print("Training done")
-    # model.save("a2c_custom_gym")
+    model.save("a2c_custom_gym")
     input("Press Enter to continue...")
     # observation, info = env.reset()
-    observation, _ = env.wait_for_observation_and_return()
+    observation, _ = env.reset()
     while server_thread.is_alive():
         # sample action from the environment
-        action = env.get_best_action(observation)
+        action = model.predict(observation)[0]
         print(f"Action: {action}")
         # get observation from the environment
         observation, reward, done,truncated, info = env.step(action)
