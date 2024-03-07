@@ -7,7 +7,7 @@ import random
 
 
 def create_state(current_x, current_y):
-    if current_x == 2 and current_y == 2:
+    if current_x == 3 and current_y == 3:
         state = 1
     else:
         state = 0
@@ -21,10 +21,10 @@ def observation_client():
     stub = observation_decision_pb2_grpc.DecisionStub(channel)
     while True:
         observation = create_state(x,y)
-        print(f"Observation Sent:\n {observation}")
+        # print(f"Observation Sent:\n {observation}")
 
         action = stub.GetAction(observation)
-        print(f"Received Action: {action.action}")
+        # print(f"Received Action: {action.action}")
         if action.action == 0:
             x += 1
         elif action.action == 1:
@@ -39,8 +39,8 @@ def observation_client():
         elif action.action == -1: 
             # special reset action
             x=y=0
-        print(f"New State: x={x},y={y}")
-        sleep(0.01)
+        # print(f"New State: x={x},y={y}")
+        # sleep(0.01)
         # reset if out of bounds (x or y greater than 10)
         if abs(x) > 10 or abs(y) > 10:
             print("Out of bounds next act should be resetting to (0,0)")
