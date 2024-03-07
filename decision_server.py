@@ -9,7 +9,7 @@ import observation_decision_pb2_grpc
 import gymnasium as gym
 import threading
 import queue
-from stable_baselines3 import A2C
+from stable_baselines3 import PPO,A2C,TD3
 from stable_baselines3.common.env_checker import check_env
 
 class CustomGymEnv(gym.Env):
@@ -23,6 +23,7 @@ class CustomGymEnv(gym.Env):
         self.action_queue = queue.Queue(1)
         self.observation_queue = queue.Queue(1)
         self.episode_reward = 0
+        self.old_observation = None
         self.action_space = gym.spaces.Discrete(5)
     
     def wait_for_observation_and_return(self):
@@ -70,7 +71,10 @@ class CustomGymEnv(gym.Env):
         observation = self.observation_queue.get(block = True)
        
         # now latest observation is loaded from DecisionServicer
+        
         converted_observation = self.observation_class_to_ndarray(observation)
+        if self.old_observation is None:
+            self.old_observation = converted_observation
         if observation.state == 1:
             reward = 1000
             done = True
@@ -79,9 +83,13 @@ class CustomGymEnv(gym.Env):
             done = True
         else:
             done = False
-            manhattan_dist_to_goal = abs(observation.x - 2) + abs(observation.y - 2)
+            # get how much closer we have gotten to goal [3,3] since last step
+            manhattan_dist_to_goal = abs(observation.x - 3) + abs(observation.y - 3) - abs(self.old_observation[0] - 3) - abs(self.old_observation[1] - 3)
             reward = -0.5 * manhattan_dist_to_goal
+            # set this as the reward to simulate a sparsely rewarded world
+            # reward = -1
         self.episode_reward += reward
+        self.old_observation = converted_observation
         return converted_observation, reward, done, False, {}
     
 class DecisionServicer(observation_decision_pb2_grpc.DecisionServicer):
@@ -121,7 +129,7 @@ if __name__ == '__main__':
     # check_env(env)
     
     model = A2C("MlpPolicy", env)
-    model.learn(total_timesteps=5_000, progress_bar=True)
+    model.learn(total_timesteps=10_000, progress_bar=True)
     # model.load("a2c_custom_gym")
     print("Training done")
     model.save("a2c_custom_gym")
